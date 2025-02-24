@@ -1,11 +1,11 @@
 [package]
 name = "fast_poisson"
-version = "1.0.1"
-authors = ["Travis Veazey <travisvz@gmail.com>"]
+version = "1.0.2"
+authors = ["Travis Veazey <travisvz@gmail.com>", "Maarten Behn <maarten.behn@gmail.com>"]
 rust-version = "1.67"
 edition = "2021"
 description = "An implementation of Bridson's algorithm for fast Poisson disk sampling"
-repository = "https://github.com/Kromey/fast_poisson"
+repository = "https://github.com/MaartenBehn/fast_poisson"
 license = "MIT OR Apache-2.0"
 keywords = ["poisson-disk", "bridson", "distribution", "sampling"]
 categories = ["algorithms"]

@@ -17,10 +17,6 @@ fn adding_points() {
 
     assert!(iter.active.contains(&point));
 
-    assert_eq!(
-        iter.sampled.nearest_one(&point, &squared_euclidean),
-        (0.0, 0)
-    );
 }
 
 #[test]

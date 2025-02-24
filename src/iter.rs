@@ -8,7 +8,7 @@
 use crate::Rand;
 
 use super::{Float, Poisson};
-use kiddo::{float::distance::squared_euclidean, KdTree};
+use kiddo::{KdTree, SquaredEuclidean};
 use rand::prelude::*;
 use rand_distr::StandardNormal;
 use std::iter::FusedIterator;
@@ -20,12 +20,13 @@ mod tests;
 pub type Point<const N: usize> = [Float; N];
 
 /// An iterator over the points in the Poisson disk distribution
-pub struct Iter<const N: usize, R = Rand>
+pub struct Iter<const N: usize, U, R = Rand>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     /// The distribution from which this iterator was built
-    distribution: Poisson<N, R>,
+    distribution: Poisson<N, U, R>,
     /// The RNG
     rng: R,
     /// All previously-selected samples, to ensure new samples maintain minimum radius
@@ -34,12 +35,13 @@ where
     active: Vec<Point<N>>,
 }
 
-impl<const N: usize, R> Iter<N, R>
+impl<const N: usize, U, R> Iter<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     /// Create an iterator over the specified distribution
-    pub(crate) fn new(distribution: Poisson<N, R>) -> Self {
+    pub(crate) fn new(distribution: Poisson<N, U, R>) -> Self {
         // If we were not given a seed, generate one non-deterministically
         let mut rng = match distribution.seed {
             None => R::from_entropy(),
@@ -104,20 +106,30 @@ where
     ///
     /// This is true if 0 ≤ point[i] < dimensions[i]
     fn in_space(&self, point: Point<N>) -> bool {
-        (self.distribution.validate)(point)
+        (self.distribution.validate)(point, &self.distribution.validate_user_data)
     }
 
     /// Returns true if there is at least one other sample point within `radius` of this point
     fn in_neighborhood(&self, point: Point<N>) -> bool {
         !self
             .sampled
-            .within(&point, self.distribution.radius.powi(2), &squared_euclidean)
+            .within::<SquaredEuclidean>(&point, self.distribution.radius.powi(2))
             .is_empty()
+    }
+
+    pub(crate) fn to_empty(mut self) -> Self {
+        while self.next().is_some() {}
+        self
+    } 
+
+    pub(crate) fn to_sampled(self) -> KdTree<Float, N> {
+        self.sampled
     }
 }
 
-impl<const N: usize, R> Iterator for Iter<N, R>
+impl<const N: usize, U, R> Iterator for Iter<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     type Item = Point<N>;
@@ -147,4 +159,4 @@ where
     }
 }
 
-impl<const N: usize> FusedIterator for Iter<N> {}
+impl<const N: usize, U: Default + Clone> FusedIterator for Iter<N, U> {}

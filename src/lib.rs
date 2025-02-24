@@ -104,7 +104,7 @@
 //! ```
 //! Instead use either of these approaches:
 //! ```
-//! # use fast_poisson::Poisson2D;
+//! # use fast_poisson::Poisson2D;fast_poisson
 //! // Builder pattern
 //! let builder = Poisson2D::new().with_seed(0xCAFEF00D);
 //! let points = builder.generate();
@@ -119,15 +119,16 @@
 //!
 //! Distributions are **not** expected to match those generated in earlier versions, even with
 //! identical seeds.
-//!
+//!fast_poisson
 //! [Bridson]: https://www.cct.lsu.edu/~fharhad/ganbatte/siggraph2007/CD2/content/sketches/0250.pdf
 //! [Tulleken]: http://devmag.org.za/2009/05/03/poisson-disk-sampling/
 //! [const generics]: https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html#const-generics-mvp
 //! [small_rng]: https://docs.rs/rand/0.8.3/rand/rngs/struct.SmallRng.html
 //! [sa]: https://crates.io/crates/serde_arrays
 
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData};
 
+use kiddo::KdTree;
 use rand::{Rng, SeedableRng};
 #[cfg(test)]
 mod tests;
@@ -190,11 +191,14 @@ use inner_types::*;
 /// whether or not they were built with the same parameters, but rather on whether or not they will
 /// produce the same results once the distribution is generated.
 #[derive(Debug)]
-pub struct Poisson<const N: usize, R = Rand>
+pub struct Poisson<const N: usize, U = (), R = Rand>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
-    validate: fn([Float; N]) -> bool,
+    validate: fn([Float; N], &U) -> bool,
+    validate_user_data: U,
+
     /// Radius around each point that must remain empty
     radius: Float,
     /// Seed to use for the internal RNG
@@ -205,8 +209,9 @@ where
     _rng: PhantomData<R>,
 }
 
-impl<const N: usize, R> Poisson<N, R>
+impl<const N: usize, U, R> Poisson<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     /// Create a new Poisson disk distribution
@@ -220,8 +225,11 @@ where
     }
 
     /// Specify the point validation function
-    pub fn with_validate(&mut self, func: fn([Float; N]) -> bool) {
+    pub fn with_validate(mut self, func: fn([Float; N], &U) -> bool, user_data: U) -> Self {
         self.validate = func;
+        self.validate_user_data = user_data;
+
+        self
     }
 
 
@@ -234,7 +242,7 @@ where
 
     /// Specify the PRNG seed for this distribution
     ///
-    /// If no seed is specified then the internal PRNG will be seeded from entropy, providing
+    /// If no seed is specified then the internal PRNG will be seeded from entropy, providingfast_poisson
     /// non-deterministic and non-repeatable results.
     ///
     /// ```
@@ -272,8 +280,9 @@ where
     }
 
     /// Specify the point validation function
-    pub fn set_validate(&mut self, func: fn([Float; N]) -> bool) {
+    pub fn set_validate(&mut self, func: fn([Float; N], &U) -> bool, user_data: U) {
         self.validate = func;
+        self.validate_user_data = user_data;
     }
 
 
@@ -324,7 +333,7 @@ where
     /// }
     /// ```
     #[must_use]
-    pub fn iter(&self) -> Iter<N, R> {
+    pub fn iter(&self) -> Iter<N, U, R> {
         Iter::new(self.clone())
     }
 
@@ -354,6 +363,10 @@ where
     /// ```
     pub fn generate(&self) -> Vec<Point<N>> {
         self.iter().collect()
+    }
+
+    pub fn generate_kd_tree(&self) -> KdTree<Float, N> {
+        self.iter().to_empty().to_sampled()
     }
 
     /// Generate the points in the Poisson distribution, as a [`Vec<T>`](std::vec::Vec).
@@ -405,18 +418,27 @@ where
 /// the same output!
 // We have to specify manually since we don't stipulate `R: Clone` as that's not
 // necessary (we don't actually clone `R`, we don't even *have* `R`!)
-impl<const N: usize, R> Clone for Poisson<N, R>
+impl<const N: usize, U, R> Clone for Poisson<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     fn clone(&self) -> Self {
-        Self { ..*self }
+        Self {
+            validate: self.validate,
+            validate_user_data: self.validate_user_data.clone(),
+            radius: self.radius,
+            seed: self.seed,
+            num_samples: self.num_samples,
+            _rng: PhantomData::default(),
+        }
     }
 }
 
 /// No object is equal, not even to itself, if the seed is unspecified
-impl<const N: usize, R> PartialEq for Poisson<N, R>
+impl<const N: usize, U, R> PartialEq for Poisson<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -428,39 +450,43 @@ where
     }
 }
 
-impl<const N: usize, R> Default for Poisson<N, R>
+impl<const N: usize, U, R> Default for Poisson<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     fn default() -> Self {
         Self {
-            validate: |p| { p.iter().all(|&n| n >= 0.0 && n < 1.0) },
+            validate: |p, _|{ p.iter().all(|&n| n >= 0.0 && n < 1.0) },
             radius: 0.1,
             seed: None,
             num_samples: 30,
             _rng: Default::default(),
+            validate_user_data: Default::default(),
         }
     }
 }
 
-impl<const N: usize, R> IntoIterator for Poisson<N, R>
+impl<const N: usize, U, R> IntoIterator for Poisson<N, U, R>
 where
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     type Item = Point<N>;
-    type IntoIter = Iter<N, R>;
+    type IntoIter = Iter<N, U, R>;
 
     fn into_iter(self) -> Self::IntoIter {
         Iter::new(self)
     }
 }
 
-impl<const N: usize, R> IntoIterator for &Poisson<N, R>
-where
+impl<const N: usize, U, R> IntoIterator for &Poisson<N, U, R>
+where 
+    U: Default + Clone,
     R: Rng + SeedableRng,
 {
     type Item = Point<N>;
-    type IntoIter = Iter<N, R>;
+    type IntoIter = Iter<N, U, R>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -468,12 +494,13 @@ where
 }
 
 /// For convenience allow converting to a Vec directly from Poisson
-impl<T, const N: usize, R> From<Poisson<N, R>> for Vec<T>
+impl<T, const N: usize, U, R> From<Poisson<N, U, R>> for Vec<T>
 where
+    U: Default + Clone,
     T: From<[Float; N]>,
     R: Rng + SeedableRng,
 {
-    fn from(poisson: Poisson<N, R>) -> Vec<T> {
+    fn from(poisson: Poisson<N, U, R>) -> Vec<T> {
         poisson.to_vec()
     }
 }

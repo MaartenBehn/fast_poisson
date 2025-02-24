@@ -20,11 +20,11 @@ fn million_seeds() {
         let points_defaults = Poisson2D::new().with_seed(seed).generate();
 
         let points = Poisson2D::new()
-            .with_dimensions([30.0, 20.0], 5.0)
+            .with_radius(5.0)
             .with_seed(seed)
             .generate();
         let points2 = Poisson2D::new()
-            .with_dimensions([30.0, 20.0], 5.0)
+            .with_radius(5.0)
             .with_seed(seed)
             .generate();
 

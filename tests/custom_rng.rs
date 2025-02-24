@@ -10,7 +10,7 @@ fn custom_rng() {
         // SplitMix isn't a good RNG for actual use, but is sufficient to test that choosing
         // a custom PRNG works as expected.
         let points = Poisson::<2, SplitMix64>::new()
-            .with_dimensions([30.0, 20.0], 5.0)
+            .with_radius(5.0)
             .with_seed(seed)
             .generate();
 

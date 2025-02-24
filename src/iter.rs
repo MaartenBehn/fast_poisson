@@ -48,11 +48,9 @@ where
 
         // We have to generate an initial point, just to ensure we've got *something* in the active list
         let mut first_point = [0.0; N];
-        for (i, dim) in first_point.iter_mut().zip(distribution.dimensions.iter()) {
+        for i in first_point.iter_mut() {
             // Start somewhere near the middle, but still randomly distributed
-            // Fixes #34 by avoiding cases where we start near an edge/corner and happen to only generate
-            // samples outside of our boundaries (because we only have ~25% chance of picking one inside)
-            *i = (1.5 - rng.gen::<Float>()) * dim / 2.0;
+            *i = 1.5 - rng.gen::<Float>();
         }
 
         Iter {
@@ -106,10 +104,7 @@ where
     ///
     /// This is true if 0 ≤ point[i] < dimensions[i]
     fn in_space(&self, point: Point<N>) -> bool {
-        point
-            .iter()
-            .zip(self.distribution.dimensions.iter())
-            .all(|(p, d)| *p >= 0. && p < d)
+        (self.distribution.validate)(point)
     }
 
     /// Returns true if there is at least one other sample point within `radius` of this point

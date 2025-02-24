@@ -129,8 +129,6 @@
 use std::marker::PhantomData;
 
 use rand::{Rng, SeedableRng};
-#[cfg(feature = "derive_serde")]
-use serde::{Deserialize, Serialize};
 #[cfg(test)]
 mod tests;
 
@@ -192,14 +190,11 @@ use inner_types::*;
 /// whether or not they were built with the same parameters, but rather on whether or not they will
 /// produce the same results once the distribution is generated.
 #[derive(Debug)]
-#[cfg_attr(feature = "derive_serde", derive(Serialize, Deserialize))]
 pub struct Poisson<const N: usize, R = Rand>
 where
     R: Rng + SeedableRng,
 {
-    /// Dimensions of the box
-    #[cfg_attr(feature = "derive_serde", serde(with = "serde_arrays"))]
-    dimensions: [Float; N],
+    validate: fn([Float; N]) -> bool,
     /// Radius around each point that must remain empty
     radius: Float,
     /// Seed to use for the internal RNG
@@ -224,32 +219,15 @@ where
         Self::default()
     }
 
-    /// Specify the space to be filled and the radius around each point
-    ///
-    /// To generate a 2-dimensional distribution in a 5×5 square, with no points closer than 1:
-    /// ```
-    /// # use fast_poisson::Poisson2D;
-    /// let mut points = Poisson2D::new().with_dimensions([5.0, 5.0], 1.0).iter();
-    ///
-    /// assert!(points.all(|p| p[0] >= 0.0 && p[0] < 5.0 && p[1] >= 0.0 && p[1] < 5.0));
-    /// ```
-    ///
-    /// To generate a 3-dimensional distribution in a 3×3×5 prism, with no points closer than 0.75:
-    /// ```
-    /// # use fast_poisson::Poisson3D;
-    /// let mut points = Poisson3D::new().with_dimensions([3.0, 3.0, 5.0], 0.75).iter();
-    ///
-    /// assert!(points.all(|p| {
-    ///     p[0] >= 0.0 && p[0] < 3.0
-    ///     && p[1] >= 0.0 && p[1] < 3.0
-    ///     && p[2] >= 0.0 && p[2] < 5.0
-    /// }));
-    /// ```
-    ///
-    /// See also [`set_dimensions`][Self::set_dimensions].
-    #[must_use]
-    pub fn with_dimensions(mut self, dimensions: [Float; N], radius: Float) -> Self {
-        self.set_dimensions(dimensions, radius);
+    /// Specify the point validation function
+    pub fn with_validate(&mut self, func: fn([Float; N]) -> bool) {
+        self.validate = func;
+    }
+
+
+    /// Specify the radius around each point
+    pub fn with_radius(mut self, radius: Float) -> Self {
+        self.set_radius(radius);
 
         self
     }
@@ -293,20 +271,14 @@ where
         self
     }
 
-    /// Specify the space to be filled and the radius around each point
-    ///
-    /// To generate a 2-dimensional distribution in a 5×5 square, with no points closer than 1:
-    /// ```
-    /// # use fast_poisson::Poisson2D;
-    /// let mut points = Poisson2D::new();
-    /// points.set_dimensions([5.0, 5.0], 1.0);
-    ///
-    /// assert!(points.iter().all(|p| p[0] >= 0.0 && p[0] < 5.0 && p[1] >= 0.0 && p[1] < 5.0));
-    /// ```
-    ///
-    /// For more see [`with_dimensions`][Self::with_dimensions].
-    pub fn set_dimensions(&mut self, dimensions: [Float; N], radius: Float) {
-        self.dimensions = dimensions;
+    /// Specify the point validation function
+    pub fn set_validate(&mut self, func: fn([Float; N]) -> bool) {
+        self.validate = func;
+    }
+
+
+    /// Specify radius around each point
+    pub fn set_radius(&mut self, radius: Float) {
         self.radius = radius;
     }
 
@@ -450,7 +422,6 @@ where
     fn eq(&self, other: &Self) -> bool {
         self.seed.is_some()
             && other.seed.is_some()
-            && self.dimensions == other.dimensions
             && self.radius == other.radius
             && self.seed == other.seed
             && self.num_samples == other.num_samples
@@ -463,7 +434,7 @@ where
 {
     fn default() -> Self {
         Self {
-            dimensions: [1.0; N],
+            validate: |p| { p.iter().all(|&n| n >= 0.0 && n < 1.0) },
             radius: 0.1,
             seed: None,
             num_samples: 30,

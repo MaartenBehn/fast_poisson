@@ -52,7 +52,7 @@ where
         let mut first_point = [0.0; N];
         for i in first_point.iter_mut() {
             // Start somewhere near the middle, but still randomly distributed
-            *i = 1.5 - rng.gen::<Float>();
+            *i = (0.5 - rng.gen::<Float>()) * distribution.radius;
         }
 
         Iter {
@@ -136,6 +136,8 @@ where
 
     fn next(&mut self) -> Option<Point<N>> {
         while !self.active.is_empty() {
+            dbg!(&self.active);
+
             let i = self.rng.gen_range(0..self.active.len());
 
             for _ in 0..self.distribution.num_samples {
